@@ -82,8 +82,12 @@ class LLMAction:
         logger.debug(f"{system_prompt}\n\n{contexts}")
 
         try:
+            # 构建用户提示词，将聊天记录作为用户输入
+            user_prompt = "请根据以下聊天记录生成一篇日记：\n" + "\n".join([ctx["content"] for ctx in contexts])
+            
             llm_response = await get_using.text_chat(
                 system_prompt=system_prompt,
+                prompt=user_prompt,
                 contexts=contexts,
             )
             diary = llm_response.completion_text
@@ -98,13 +102,29 @@ class LLMAction:
         using_provider = self.context.get_using_provider()
         if not using_provider:
             raise ValueError("未配置 LLM 提供商")
+        
+        # 检查说说是否只有图片而没有文字内容
+        has_text = bool(post.text.strip()) or bool(post.rt_con.strip())
+        has_images = bool(post.images)
+        
+        # 如果只有图片而没有文字内容，则不进行评论
+        if not has_text and has_images:
+            logger.info("说说只有图片而没有文字内容，跳过评论")
+            return ""
+        
         try:
-            prompt = f"\n这条帖子的具体内容如下：\n{post.text}\n{post.rt_con}"
+            # 构建包含图片描述的提示词
+            image_description = ""
+            if post.images:
+                image_description = f"\n该帖子包含 {len(post.images)} 张图片，请根据文字内容生成评论。"
+            
+            prompt = f"\n这条帖子的具体内容如下：\n{post.text}\n{post.rt_con}{image_description}"
             logger.debug(prompt)
+            
+            # 移除不支持的image_urls参数，仅使用文本内容
             llm_response = await using_provider.text_chat(
                 system_prompt=self.config["comment_prompt"],
                 prompt=prompt,
-                image_urls=post.images,
             )
             comment = llm_response.completion_text.rstrip("。")
             logger.info(f"LLM 生成的评论：{comment}")
