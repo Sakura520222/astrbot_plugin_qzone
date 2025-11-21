@@ -201,20 +201,28 @@ class QzonePlugin(Star):
     async def like(self, event: AiocqhttpMessageEvent):
         """点赞说说 <@群友> <序号>"""
         posts = await self._get_posts(event)
-        for post in posts:
+        results = []
+        
+        for i, post in enumerate(posts, 1):
             succ, data = await self.qzone.like(fid=post.tid, target_id=str(post.uin))
             if not succ:
-                yield event.plain_result(str(data))
+                results.append(f"{i}. 点赞{post.name}的说说失败: {data}")
                 logger.error(f"点赞失败: {data}")
                 continue
-            yield event.plain_result(f"已给{post.name}的说说点赞: {post.text[:10]}")
+            results.append(f"{i}. 已给{post.name}的说说点赞: {post.text[:10]}")
+        
+        # 将所有结果合并为一条消息发送
+        if results:
+            yield event.plain_result("\n".join(results))
 
     # @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("评论说说")
     async def comment(self, event: AiocqhttpMessageEvent):
         """评论说说 <@群友> <序号>"""
         posts = await self._get_posts(event, no_self=True)
-        for post in posts:
+        results = []
+        
+        for i, post in enumerate(posts, 1):
             content = await self.llm.generate_comment(post)
             succ, data = await self.qzone.comment(
                 fid=post.tid,
@@ -222,7 +230,7 @@ class QzonePlugin(Star):
                 content=content,
             )
             if not succ:
-                yield event.plain_result(str(data))
+                results.append(f"{i}. 评论{post.name}的说说失败: {data}")
                 logger.error(f"评论失败: {data}")
                 continue
 
@@ -239,20 +247,28 @@ class QzonePlugin(Star):
             # 更新数据
             post.comments.append(comment)
             await post.save(self.db)
-            # 展示
-            img_path = await post.to_image(self.style)
-            yield event.image_result(img_path)
+            results.append(f"{i}. 已给{post.name}的说说评论: {content[:20]}...")
+        
+        # 将所有结果合并为一条消息发送
+        if results:
+            yield event.plain_result("\n".join(results))
 
-    #@filter.command("删除说说") # 接口测试中
+    @filter.command("删除说说") # 接口测试中
     async def delete_qzone(self, event: AiocqhttpMessageEvent):
         """删除说说 <序号>"""
         posts = await self._get_posts(event)
-        for post in posts:
+        results = []
+        
+        for i, post in enumerate(posts, 1):
             succ, data = await self.qzone.delete(post.tid)
             if succ:
-                yield event.plain_result(f"已删除{post.name}的说说: {post.text[:10]}")
+                results.append(f"{i}. 已删除{post.name}的说说: {post.text[:10]}")
             else:
-                yield event.plain_result(f"删除失败: {data['message']}")
+                results.append(f"{i}. 删除{post.name}的说说失败: {data['message']}")
+        
+        # 将所有结果合并为一条消息发送
+        if results:
+            yield event.plain_result("\n".join(results))
 
     async def _publish(
         self,
