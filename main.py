@@ -223,7 +223,7 @@ class QzonePlugin(Star):
         results = []
         
         for i, post in enumerate(posts, 1):
-            content = await self.llm.generate_comment(post)
+            content = await self.llm.generate_comment(post, event)
             succ, data = await self.qzone.comment(
                 fid=post.tid,
                 target_id=str(post.uin),

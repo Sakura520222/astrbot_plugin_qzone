@@ -346,16 +346,12 @@ class LLMAction:
         
         return text, images
  
-    async def analyze_sentiment_and_topic(self, text: str) -> tuple[str, str]:
+    async def analyze_sentiment_and_topic(self, text: str, event=None) -> tuple[str, str]:
         """分析文本的情感和话题
         
         Returns:
             (情感分类, 话题分类)
         """
-        get_using = self.context.get_using_provider()
-        if not get_using:
-            return "中性", "其他"
-        
         try:
             # 构建情感和话题分析提示词
             prompt = """请分析以下文本的情感和话题，按以下格式返回：
@@ -364,14 +360,39 @@ class LLMAction:
 
 文本内容：{text}""".format(text=text)
             
-            context = [
-                {"role": "system", "content": "你是一个专业的情感分析和话题分类助手"},
-                {"role": "user", "content": prompt}
-            ]
-            
-            # 调用LLM进行分析
-            response = await get_using.chat_complete(context)
-            result = response.choices[0].message.content
+            # 使用AstrBot v4.5.7+的新LLM调用方式
+            if event and hasattr(event, 'unified_msg_origin'):
+                # 如果有事件对象，使用会话相关的LLM调用
+                umo = event.unified_msg_origin
+                provider_id = await self.context.get_current_chat_provider_id(umo=umo)
+                llm_resp = await self.context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=prompt,
+                )
+                result = llm_resp.completion_text
+            else:
+                # 如果没有事件对象，使用默认的LLM调用
+                get_using = self.context.get_using_provider()
+                if not get_using:
+                    return "中性", "其他"
+                
+                context = [
+                    {"role": "system", "content": "你是一个专业的情感分析和话题分类助手"},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                # 兼容旧版本调用方式
+                if hasattr(get_using, 'chat_complete'):
+                    response = await get_using.chat_complete(context)
+                elif hasattr(get_using, 'chat'):
+                    response = await get_using.chat(context)
+                elif hasattr(get_using, 'complete'):
+                    response = await get_using.complete(context)
+                else:
+                    logger.warning("未找到合适的LLM调用方法，使用默认分析结果")
+                    return "中性", "其他"
+                
+                result = response.choices[0].message.content
             
             # 解析结果
             sentiment = "中性"
@@ -425,25 +446,55 @@ class LLMAction:
             return text, [], "中性", "其他"
         
         # 进行情感和话题分析
-        sentiment, topic_analysis = await self.analyze_sentiment_and_topic(text)
+        sentiment, topic_analysis = await self.analyze_sentiment_and_topic(text, event=None)
         
         return text, images, sentiment, topic_analysis
  
-    async def generate_comment(self, post: Post) -> str:
+    async def generate_comment(self, post: Post, event=None) -> str:
         """根据帖子内容生成评论"""
-        get_using = self.context.get_using_provider()
-        if not get_using:
-            raise ValueError("未配置 LLM 提供商")
-        
         # 构建提示词
         prompt = self.config.get("comment_prompt", "请根据帖子内容生成一条精辟简短的评论, 评论要抓住主题")
         
-        # 构建上下文
-        context = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": f"帖子内容：{post.text}"}
-        ]
+        # 构建完整的提示词
+        full_prompt = f"{prompt}\n帖子内容：{post.text}"
         
-        # 调用LLM生成评论
-        response = await get_using.chat_complete(context)
-        return response.choices[0].message.content
+        # 使用AstrBot v4.5.7+的新LLM调用方式
+        try:
+            if event and hasattr(event, 'unified_msg_origin'):
+                # 如果有事件对象，使用会话相关的LLM调用
+                umo = event.unified_msg_origin
+                provider_id = await self.context.get_current_chat_provider_id(umo=umo)
+                llm_resp = await self.context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=full_prompt,
+                )
+                return llm_resp.completion_text
+            else:
+                # 如果没有事件对象，使用默认的LLM调用
+                get_using = self.context.get_using_provider()
+                if not get_using:
+                    raise ValueError("未配置 LLM 提供商")
+                
+                # 构建上下文
+                context = [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"帖子内容：{post.text}"}
+                ]
+                
+                # 兼容旧版本调用方式
+                if hasattr(get_using, 'chat_complete'):
+                    response = await get_using.chat_complete(context)
+                    return response.choices[0].message.content
+                elif hasattr(get_using, 'chat'):
+                    response = await get_using.chat(context)
+                    return response.choices[0].message.content
+                elif hasattr(get_using, 'complete'):
+                    response = await get_using.complete(context)
+                    return response.choices[0].message.content
+                else:
+                    logger.warning("未找到合适的LLM调用方法，使用默认评论")
+                    return "👍 这条说说很有意思！"
+        except Exception as e:
+            logger.error(f"LLM调用失败：{e}")
+            # 返回一个安全的默认评论
+            return "👍 这条说说很有意思！"

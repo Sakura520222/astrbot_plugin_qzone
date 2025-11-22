@@ -103,7 +103,8 @@ class AutoComment:
 
     async def comment_post(self, post: Post):
         try:
-            content = await self.llm.generate_comment(post)
+            # 在定时任务中没有event对象，使用None
+            content = await self.llm.generate_comment(post, event=None)
 
             succ, data = await self.qzone.comment(
                 fid=post.tid,
