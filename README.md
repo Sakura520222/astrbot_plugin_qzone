@@ -2,7 +2,7 @@
 
 # AstrBot QQ空间插件
 
-[![访问统计](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FSakura520222%2Fastrbot_plugin_qzone&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=访问量&edge_flat=false)](https://hits.seeyoufarm.com) [![GitHub stars](https://img.shields.io/github/stars/Sakura520222/astrbot_plugin_qzone?style=flat-square&logo=github)](https://github.com/Sakura520222/astrbot_plugin_qzone/stargazers) [![GitHub forks](https://img.shields.io/github/forks/Sakura520222/astrbot_plugin_qzone?style=flat-square&logo=github)](https://github.com/Sakura520222/astrbot_plugin_qzone/network/members)
+[![访问统计](https://visitor-badge.laobi.icu/badge?page_id=Sakura520222.astrbot_plugin_qzone)](https://github.com/Sakura520222/astrbot_plugin_qzone) [![GitHub stars](https://img.shields.io/github/stars/Sakura520222/astrbot_plugin_qzone?style=flat-square&logo=github)](https://github.com/Sakura520222/astrbot_plugin_qzone/stargazers) [![GitHub forks](https://img.shields.io/github/forks/Sakura520222/astrbot_plugin_qzone?style=flat-square&logo=github)](https://github.com/Sakura520222/astrbot_plugin_qzone/network/members)
 
 _✨ 专为AstrBot设计的QQ空间自动化管理插件 ✨_
 
