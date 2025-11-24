@@ -1,6 +1,7 @@
 # main.py
 
 import asyncio
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pillowmd
@@ -25,6 +26,7 @@ from .core.campus_wall import CampusWall
 from .core.llm_action import LLMAction
 from .core.post import Post, PostDB
 from .core.qzone_api import Qzone
+from .core.surfing_manager import SurfingManager
 from .core.utils import get_ats, get_image_urls, get_nickname
 
 
@@ -52,6 +54,10 @@ class QzonePlugin(Star):
         self.cache.mkdir(parents=True, exist_ok=True)
         # 数据库管理器
         self.db = PostDB(self.db_path)
+        
+        # 上网冲浪功能管理器
+        data_dir = StarTools.get_data_dir("astrbot_plugin_qzone")
+        self.surfing_manager = SurfingManager(str(data_dir))
 
     async def initialize(self):
         """加载、重载插件时触发"""
@@ -355,6 +361,303 @@ class QzonePlugin(Star):
         """删除稿件 <稿件ID>"""
         await self.campus_wall.delete(event, input)
 
+    # 上网冲浪指令组
+    @filter.command_group("冲浪")
+    def surfing(self):
+        """上网冲浪相关功能"""
+        pass
+
+    @surfing.command("写说说")
+    async def surfing_diary(self, event: AiocqhttpMessageEvent, 
+                           category: str = "随机",
+                           custom_topic: str = "",
+                           writing_style: str = "幽默"):
+        """
+        上网冲浪写说说 <分类> <自定义主题> <写作风格>
+        
+        分类选项：科技/娱乐/生活/社会/知识/随机
+        写作风格：幽默/深度/简洁/文艺/实用
+        """
+        try:
+            # 检查用户权限
+            user_id = event.get_sender_id()
+            has_permission, error_msg = self.surfing_manager.check_permission(user_id, self.config)
+            if not has_permission:
+                yield event.plain_result(error_msg)
+                return
+            
+            # 检查剩余使用次数
+            remaining = self.surfing_manager.get_remaining_usage(user_id, self.config)
+            if remaining == 0:
+                yield event.plain_result(f"❌ 今日使用次数已达上限，请明天再试")
+                return
+            
+            # 生成上网冲浪说说
+            result = await self.llm.generate_surfing_diary(
+                category=category,
+                custom_topic=custom_topic,
+                writing_style=writing_style
+            )
+            
+            if result.get("error"):
+                yield event.plain_result(f"上网冲浪失败：{result['error']}")
+                return
+            
+            # 获取图片
+            images = await get_image_urls(event)
+            
+            # 发布说说
+            await self._publish(event, result["content"], images)
+            
+            # 记录使用次数
+            self.surfing_manager.record_usage(user_id)
+            
+            # 获取更新后的剩余次数
+            new_remaining = self.surfing_manager.get_remaining_usage(user_id, self.config)
+            
+            # 发送成功信息
+            yield event.plain_result(
+                f"✅ 上网冲浪说说发布成功！\n"
+                f"📝 主题：{result.get('search_query', '随机')}\n"
+                f"🎨 风格：{writing_style}\n"
+                f"🔍 搜索了 {len(result.get('search_results', []))} 条信息\n"
+                f"📊 今日剩余次数：{new_remaining if new_remaining >= 0 else '无限制'}"
+            )
+            
+        except Exception as e:
+            logger.error(f"上网冲浪写说说失败：{e}")
+            yield event.plain_result(f"上网冲浪写说说失败：{str(e)}")
+
+    @surfing.command("写说说配图")
+    async def surfing_diary_with_images(self, event: AiocqhttpMessageEvent,
+                                       category: str = "随机",
+                                       custom_topic: str = "",
+                                       writing_style: str = "幽默"):
+        """
+        上网冲浪写说说并配图 <分类> <自定义主题> <写作风格>
+        
+        分类选项：科技/娱乐/生活/社会/知识/随机
+        写作风格：幽默/深度/简洁/文艺/实用
+        """
+        try:
+            # 检查用户权限
+            user_id = event.get_sender_id()
+            has_permission, error_msg = self.surfing_manager.check_permission(user_id, self.config)
+            if not has_permission:
+                yield event.plain_result(error_msg)
+                return
+            
+            # 检查剩余使用次数
+            remaining = self.surfing_manager.get_remaining_usage(user_id, self.config)
+            if remaining == 0:
+                yield event.plain_result(f"❌ 今日使用次数已达上限，请明天再试")
+                return
+            
+            # 生成上网冲浪说说并配图
+            content, images, result = await self.llm.generate_surfing_diary_with_images(
+                category=category,
+                custom_topic=custom_topic,
+                writing_style=writing_style
+            )
+            
+            if result.get("error"):
+                yield event.plain_result(f"上网冲浪失败：{result['error']}")
+                return
+            
+            # 发布说说
+            await self._publish(event, content, images)
+            
+            # 记录使用次数
+            self.surfing_manager.record_usage(user_id)
+            
+            # 获取更新后的剩余次数
+            new_remaining = self.surfing_manager.get_remaining_usage(user_id, self.config)
+            
+            # 发送成功信息
+            yield event.plain_result(
+                f"✅ 上网冲浪说说配图发布成功！\n"
+                f"📝 主题：{result.get('search_query', '随机')}\n"
+                f"🎨 风格：{writing_style}\n"
+                f"🖼️ 配图：{len(images)} 张\n"
+                f"🔍 搜索了 {len(result.get('search_results', []))} 条信息\n"
+                f"📊 今日剩余次数：{new_remaining if new_remaining >= 0 else '无限制'}"
+            )
+            
+        except Exception as e:
+            logger.error(f"上网冲浪写说说配图失败：{e}")
+            yield event.plain_result(f"上网冲浪写说说配图失败：{str(e)}")
+
+    @surfing.command("热门话题")
+    async def trending_topics(self, event: AiocqhttpMessageEvent):
+        """获取当前热门话题"""
+        try:
+            topics = await self.llm.get_trending_topics()
+            
+            if not topics:
+                yield event.plain_result("暂时没有获取到热门话题，请稍后再试")
+                return
+            
+            # 格式化热门话题列表
+            topic_list = "\n".join([f"• {topic}" for topic in topics[:10]])  # 显示前10个
+            
+            yield event.plain_result(
+                f"🔥 当前热门话题：\n{topic_list}\n\n"
+                f"💡 使用命令：/冲浪 写说说 <分类> <话题> <风格> 来生成说说"
+            )
+            
+        except Exception as e:
+            logger.error(f"获取热门话题失败：{e}")
+            yield event.plain_result(f"获取热门话题失败：{str(e)}")
+
+    @surfing.command("帮助")
+    async def surfing_help(self, event: AiocqhttpMessageEvent):
+        """上网冲浪功能帮助"""
+        # 获取当前配置信息
+        access_mode = self.config.get("surfing_access_mode", "所有人")
+        daily_limit = self.config.get("surfing_daily_limit", 3)
+        
+        # 获取用户使用情况
+        user_id = event.get_sender_id()
+        stats = self.surfing_manager.get_usage_statistics(user_id)
+        remaining = self.surfing_manager.get_remaining_usage(user_id, self.config)
+        
+        help_text = f"""
+🌊 上网冲浪功能帮助
+
+📊 当前状态：
+• 访问模式：{access_mode}
+• 每日限制：{daily_limit if daily_limit > 0 else '无限制'}次
+• 您今日已使用：{stats['today_usage']}次
+• 剩余次数：{remaining if remaining >= 0 else '无限制'}次
+
+📚 可用命令：
+• /冲浪 写说说 <分类> <主题> <风格> - 生成并发布上网冲浪说说
+• /冲浪 写说说配图 <分类> <主题> <风格> - 生成带配图的说说
+• /冲浪 热门话题 - 获取当前热门话题
+• /冲浪 我的统计 - 查看个人使用统计
+• /冲浪 帮助 - 显示此帮助信息
+
+🎯 分类选项：
+• 科技 - 科技新闻、AI发展、编程等
+• 娱乐 - 影视、音乐、游戏、明星等
+• 生活 - 日常、美食、旅游、健康等
+• 社会 - 时事、政策、社会热点等
+• 知识 - 科普、历史、文化、学习等
+• 随机 - 随机选择分类
+
+✍️ 写作风格：
+• 幽默 - 轻松幽默的风格
+• 深度 - 深度分析的观点
+• 简洁 - 简洁明了的表达
+• 文艺 - 文艺优美的语言
+• 实用 - 实用贴士和建议
+
+💡 示例：
+• /冲浪 写说说 科技 AI发展 幽默
+• /冲浪 写说说配图 生活 美食 实用
+• /冲浪 写说说 随机 今日热点 简洁
+        """
+        yield event.plain_result(help_text)
+    
+    @surfing.command("我的统计")
+    async def my_stats(self, event: AiocqhttpMessageEvent):
+        """查看个人上网冲浪使用统计"""
+        user_id = event.get_sender_id()
+        stats = self.surfing_manager.get_usage_statistics(user_id)
+        remaining = self.surfing_manager.get_remaining_usage(user_id, self.config)
+        
+        # 格式化最近7天的使用情况
+        recent_days = ""
+        for date, count in stats["recent_days"].items():
+            if count > 0:
+                recent_days += f"• {date}: {count}次\n"
+        
+        if not recent_days:
+            recent_days = "• 最近7天无使用记录\n"
+        
+        stats_text = f"""
+📊 您的上网冲浪使用统计
+
+📈 总体统计：
+• 总使用次数：{stats['total_usage']}次
+• 今日使用次数：{stats['today_usage']}次
+• 剩余使用次数：{remaining if remaining >= 0 else '无限制'}次
+
+📅 最近7天使用情况：
+{recent_days}
+💡 提示：使用 /冲浪 写说说 命令开始冲浪吧！
+        """
+        yield event.plain_result(stats_text)
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @surfing.command("重置次数")
+    async def reset_usage(self, event: AiocqhttpMessageEvent, target_user: str = ""):
+        """重置用户使用次数 <@用户>"""
+        if target_user:
+            # 重置指定用户
+            user_id = target_user
+            if user_id.startswith("@"):
+                user_id = user_id[1:]
+            
+            if not user_id.isdigit():
+                yield event.plain_result("❌ 请输入正确的QQ号")
+                return
+            
+            self.surfing_manager.reset_user_usage(user_id)
+            yield event.plain_result(f"✅ 已重置用户 {user_id} 的使用次数")
+        else:
+            # 重置所有用户
+            all_usage = self.surfing_manager.get_all_users_usage()
+            user_count = len(all_usage)
+            
+            # 重置所有用户
+            for user_id in list(all_usage.keys()):
+                self.surfing_manager.reset_user_usage(user_id)
+            
+            yield event.plain_result(f"✅ 已重置所有 {user_count} 个用户的使用次数")
+    
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @surfing.command("查看统计")
+    async def view_stats(self, event: AiocqhttpMessageEvent):
+        """查看所有用户的上网冲浪使用统计"""
+        all_usage = self.surfing_manager.get_all_users_usage()
+        
+        if not all_usage:
+            yield event.plain_result("📊 暂无用户使用记录")
+            return
+        
+        # 按总使用次数排序
+        sorted_users = sorted(all_usage.items(), key=lambda x: sum(x[1].values()), reverse=True)
+        
+        stats_text = "📊 所有用户上网冲浪使用统计\n\n"
+        
+        for i, (user_id, usage_data) in enumerate(sorted_users[:10], 1):  # 显示前10名
+            total_usage = sum(usage_data.values())
+            today_usage = usage_data.get(self.surfing_manager._get_today_date(), 0)
+            
+            stats_text += f"{i}. 用户 {user_id}:\n"
+            stats_text += f"   • 总使用次数: {total_usage}次\n"
+            stats_text += f"   • 今日使用次数: {today_usage}次\n"
+            
+            # 显示最近3天的使用情况
+            recent_days = []
+            for j in range(3):
+                date = (datetime.now() - timedelta(days=j)).strftime("%Y-%m-%d")
+                if date in usage_data:
+                    recent_days.append(f"{date}: {usage_data[date]}次")
+            
+            if recent_days:
+                stats_text += f"   • 最近使用: {', '.join(recent_days)}\n"
+            
+            stats_text += "\n"
+        
+        if len(sorted_users) > 10:
+            stats_text += f"... 还有 {len(sorted_users) - 10} 个用户\n"
+        
+        stats_text += "\n💡 使用 /冲浪 重置次数 <@用户> 来重置指定用户的使用次数"
+        
+        yield event.plain_result(stats_text)
+
     async def terminate(self):
         """插件卸载时"""
         if hasattr(self, "qzone"):
@@ -363,3 +666,5 @@ class QzonePlugin(Star):
             await self.auto_comment.terminate()
         if hasattr(self, "auto_publish"):
             await self.auto_publish.terminate()
+        if hasattr(self, "llm"):
+            await self.llm.close()

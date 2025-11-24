@@ -12,6 +12,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.context import Context
 
 from .post import Post
+from .web_surfing import WebSurfingGenerator
 
 
 class LLMAction:
@@ -19,6 +20,9 @@ class LLMAction:
         self.context = context
         self.config = config
         self.client = client
+        
+        # 初始化上网冲浪生成器
+        self.web_surfing = WebSurfingGenerator(context, config)
 
     def _build_context(
         self, round_messages: list[dict[str, Any]]
@@ -498,3 +502,104 @@ class LLMAction:
             logger.error(f"LLM调用失败：{e}")
             # 返回一个安全的默认评论
             return "👍 这条说说很有意思！"
+    
+    async def generate_surfing_diary(self, 
+                                    category: str = "随机",
+                                    custom_topic: str = "",
+                                    writing_style: str = "幽默",
+                                    max_length: int = 300,
+                                    include_sources: bool = True) -> dict:
+        """
+        生成上网冲浪说说
+        
+        Args:
+            category: 搜索分类（科技/娱乐/生活/社会/知识/随机）
+            custom_topic: 自定义搜索主题
+            writing_style: 写作风格（幽默/深度/简洁/文艺/实用）
+            max_length: 最大长度
+            include_sources: 是否包含信息来源
+            
+        Returns:
+            生成的说说内容及相关信息
+        """
+        try:
+            result = await self.web_surfing.generate_surfing_diary(
+                category=category if category != "随机" else None,
+                custom_topic=custom_topic if custom_topic else None,
+                writing_style=writing_style,
+                max_length=max_length,
+                include_sources=include_sources
+            )
+            
+            logger.info(f"上网冲浪说说生成成功，分类：{category}，风格：{writing_style}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"生成上网冲浪说说失败：{e}")
+            # 返回错误信息
+            return {
+                "content": f"上网冲浪失败：{str(e)}，请检查网络连接或Tavily API配置。",
+                "search_query": custom_topic if custom_topic else category,
+                "search_results": [],
+                "writing_style": writing_style,
+                "category": category,
+                "timestamp": "",
+                "error": str(e)
+            }
+    
+    async def get_trending_topics(self) -> list:
+        """获取热门话题"""
+        try:
+            topics = await self.web_surfing.get_trending_topics()
+            logger.info(f"获取到 {len(topics)} 个热门话题")
+            return topics
+        except Exception as e:
+            logger.error(f"获取热门话题失败：{e}")
+            return []
+    
+    async def generate_surfing_diary_with_images(self,
+                                                 category: str = "随机",
+                                                 custom_topic: str = "",
+                                                 writing_style: str = "幽默",
+                                                 max_length: int = 300,
+                                                 include_sources: bool = True) -> tuple:
+        """
+        生成上网冲浪说说并配图
+        
+        Returns:
+            (说说内容, 图片列表, 搜索信息)
+        """
+        try:
+            # 先生成说说内容
+            surfing_result = await self.generate_surfing_diary(
+                category=category,
+                custom_topic=custom_topic,
+                writing_style=writing_style,
+                max_length=max_length,
+                include_sources=include_sources
+            )
+            
+            # 检查是否生成成功
+            if surfing_result.get("error"):
+                return surfing_result["content"], [], surfing_result
+            
+            # 生成图片
+            images = []
+            try:
+                images = await self.generate_image(surfing_result["content"], "default")
+                logger.info(f"成功为上网冲浪说说生成 {len(images)} 张配图")
+            except Exception as e:
+                logger.warning(f"图片生成失败，继续发布纯文本说说：{e}")
+            
+            return surfing_result["content"], images, surfing_result
+            
+        except Exception as e:
+            logger.error(f"生成上网冲浪说说配图失败：{e}")
+            return f"生成说说失败：{str(e)}", [], {}
+    
+    async def close(self):
+        """关闭资源"""
+        try:
+            await self.web_surfing.close()
+        except Exception as e:
+            logger.warning(f"关闭上网冲浪生成器失败：{e}")

@@ -51,5 +51,72 @@
         "type": "bool",
         "hint": "是否开启校园墙功能，功能包括：投稿、查看稿件、通过投稿、拒绝投稿",
         "default": true
+    },
+    "tavily_api_key": {
+        "description": "Tavily API密钥",
+        "type": "string",
+        "hint": "用于上网冲浪功能的搜索API，请到 https://tavily.com/ 申请免费API密钥",
+        "default": ""
+    },
+    "surfing_enabled": {
+        "description": "上网冲浪功能开关",
+        "type": "bool",
+        "hint": "是否开启上网冲浪功能，包括自动搜索热门话题生成说说",
+        "default": true
+    },
+    "surfing_cron": {
+        "description": "自动上网冲浪时间间隔",
+        "type": "string",
+        "hint": "格式为0 0 0 0 0，表示分、时、日、月、周，*表示任意，留空表示不启用此定时任务。示例：\"0 9,18 * * *\" 表示每天9点和18点各执行一次",
+        "default": "0 9,18 * * *"
+    },
+    "surfing_prompt": {
+        "description": "上网冲浪写说说的llm提示词",
+        "type": "text",
+        "hint": "建议自行根据Bot人格进行改写，从而达到更好的效果",
+        "default": "请根据搜索到的信息，写一段有趣、有深度的说说。要求：- 内容要基于搜索到的真实信息 - 语言要生动有趣 - 可以适当加入个人观点 - 长度控制在200-300字之间 - 结尾可以留一个思考问题"
+    },
+    "surfing_max_results": {
+        "description": "每次搜索的最大结果数",
+        "type": "int",
+        "hint": "每次上网冲浪搜索时获取的最大结果数量，建议3-5个",
+        "default": 3
+    },
+    "surfing_include_sources": {
+        "description": "是否在说说中包含信息来源",
+        "type": "bool",
+        "hint": "是否在生成的说说内容中包含搜索到的信息来源",
+        "default": false
+    },
+    "surfing_auto_images": {
+        "description": "是否自动为说说配图",
+        "type": "bool",
+        "hint": "是否自动为上网冲浪生成的说说配图",
+        "default": false
+    },
+    "surfing_access_mode": {
+        "description": "上网冲浪访问模式",
+        "type": "string",
+        "hint": "所有人：所有人都可以使用；白名单：只有白名单用户可以使用；主人模式：只有主人可以使用",
+        "enum": ["所有人", "白名单", "主人模式"],
+        "default": "所有人"
+    },
+    "surfing_whitelist": {
+        "description": "上网冲浪白名单用户",
+        "type": "list",
+        "hint": "在白名单模式下，只有这些用户可以使用上网冲浪功能，格式为QQ号列表",
+        "default": []
+    },
+    "surfing_daily_limit": {
+        "description": "每日使用次数限制",
+        "type": "int",
+        "hint": "每个用户每日最多使用上网冲浪功能的次数，0表示无限制",
+        "default": 3
+    },
+    "surfing_master_qq": {
+        "description": "主人QQ号",
+        "type": "string",
+        "hint": "在主人模式下，只有这个QQ号可以使用上网冲浪功能",
+        "default": ""
     }
 }

@@ -1,3 +1,4 @@
 pillowmd
 json5
 Pillow
+tavily-python
